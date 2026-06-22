@@ -28,10 +28,12 @@ jobs:
 
             | Platform | File |
             |----------|------|
-            | Windows  | `SecureVault-Setup-*.exe` (attached below once built) |
-            | macOS    | `SecureVault-*.dmg` (attached below once built) |
+            | Windows  | `SecureVault-Setup-*.exe` |
+            | macOS Apple Silicon (M1/M2/M3/M4) | `SecureVault-*-arm64.dmg` |
+            | macOS Intel | `SecureVault-*-intel.dmg` |
 
-            **macOS:** Right-click → Open on first launch to bypass Gatekeeper.
+            **macOS:** Right-click the app → **Open** on first launch to bypass Gatekeeper.
+            Not sure which Mac you have? Apple menu → About This Mac. If it says "Apple M..." download arm64. If it says "Intel" download intel.
 
             Your vault data is stored locally and is never uploaded anywhere.
           draft: false
@@ -74,10 +76,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           files: dist/SecureVault-Setup-*.exe
 
-  # ── macOS DMG ────────────────────────────────────────────────────────
-  build-macos:
+  # ── macOS DMG (Apple Silicon) ─────────────────────────────────────────
+  build-macos-arm:
     needs: release
-    runs-on: macos-latest
+    runs-on: macos-latest       # arm64 (Apple Silicon M-series)
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:
@@ -129,11 +131,75 @@ jobs:
             --icon "SecureVault.app" 145 185 \
             --hide-extension "SecureVault.app" \
             --app-drop-link 435 185 \
-            "dist/SecureVault-${{ github.ref_name }}.dmg" \
+            "dist/SecureVault-${{ github.ref_name }}-arm64.dmg" \
             "dist/SecureVault.app"
 
       - name: Attach DMG to release
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          files: dist/SecureVault-*.dmg
+          files: dist/SecureVault-*-arm64.dmg
+
+  # ── macOS DMG (Intel) ─────────────────────────────────────────────────
+  build-macos-intel:
+    needs: release
+    runs-on: macos-13            # x86_64 (Intel)
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Generate icon PNGs
+        run: python create_icon.py
+
+      - name: Build icon.icns
+        run: |
+          mkdir -p assets/icon.iconset
+          cp assets/icon_16.png  assets/icon.iconset/icon_16x16.png
+          cp assets/icon_32.png  assets/icon.iconset/icon_16x16@2x.png
+          cp assets/icon_32.png  assets/icon.iconset/icon_32x32.png
+          cp assets/icon_64.png  assets/icon.iconset/icon_32x32@2x.png
+          cp assets/icon_128.png assets/icon.iconset/icon_128x128.png
+          cp assets/icon_256.png assets/icon.iconset/icon_128x128@2x.png
+          cp assets/icon_256.png assets/icon.iconset/icon_256x256.png
+          cp assets/icon_512.png assets/icon.iconset/icon_256x256@2x.png
+          cp assets/icon_512.png assets/icon.iconset/icon_512x512.png
+          iconutil -c icns assets/icon.iconset -o assets/icon.icns
+
+      - name: Build with PyInstaller
+        run: pyinstaller --clean SecureVault.spec
+
+      - name: Ad-hoc code sign
+        run: codesign --force --deep --sign - dist/SecureVault.app
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build DMG
+        run: |
+          create-dmg \
+            --volname "SecureVault" \
+            --volicon "assets/icon.icns" \
+            --window-pos 200 120 \
+            --window-size 580 380 \
+            --icon-size 120 \
+            --icon "SecureVault.app" 145 185 \
+            --hide-extension "SecureVault.app" \
+            --app-drop-link 435 185 \
+            "dist/SecureVault-${{ github.ref_name }}-intel.dmg" \
+            "dist/SecureVault.app"
+
+      - name: Attach DMG to release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: dist/SecureVault-*-intel.dmg
