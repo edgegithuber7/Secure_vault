@@ -10,9 +10,9 @@ AppPublisherURL=https://github.com/edgegithuber7/Secure_vault
 AppSupportURL=https://github.com/edgegithuber7/Secure_vault/issues
 DefaultDirName={autopf}\SecureVault
 DefaultGroupName=SecureVault
-OutputDir=dist
+OutputDir=..\dist
 OutputBaseFilename=SecureVault-Setup-1.0.0
-SetupIconFile=assets\icon.ico
+SetupIconFile=..\assets\icon.ico
 UninstallDisplayIcon={app}\SecureVault.exe
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -28,7 +28,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Files]
-Source: "dist\SecureVault\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\SecureVault\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\SecureVault";               Filename: "{app}\SecureVault.exe"
