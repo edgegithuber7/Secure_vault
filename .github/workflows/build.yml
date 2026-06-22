@@ -1,0 +1,160 @@
+name: Build & Release
+
+# Triggers:
+#   • Push a version tag  (git tag v1.0.0 && git push --tags)
+#     → full release with Windows EXE + macOS DMG attached
+#   • Manual run from the Actions tab (any branch)
+#     → builds artifacts but does NOT create a public release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  # ── Windows installer ────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Generate icon
+        run: python create_icon.py
+
+      - name: Build with PyInstaller
+        run: pyinstaller --clean SecureVault.spec
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+        shell: pwsh
+
+      - name: Build installer
+        run: iscc installer\securevault.iss
+        shell: cmd
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/SecureVault-Setup-1.0.0.exe
+
+  # ── macOS DMG ────────────────────────────────────────────────────────
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Generate icon PNGs
+        run: python create_icon.py
+
+      - name: Build icon.icns
+        run: |
+          mkdir -p assets/icon.iconset
+          cp assets/icon_16.png  assets/icon.iconset/icon_16x16.png
+          cp assets/icon_32.png  assets/icon.iconset/icon_16x16@2x.png
+          cp assets/icon_32.png  assets/icon.iconset/icon_32x32.png
+          cp assets/icon_64.png  assets/icon.iconset/icon_32x32@2x.png
+          cp assets/icon_128.png assets/icon.iconset/icon_128x128.png
+          cp assets/icon_256.png assets/icon.iconset/icon_128x128@2x.png
+          cp assets/icon_256.png assets/icon.iconset/icon_256x256.png
+          cp assets/icon_512.png assets/icon.iconset/icon_256x256@2x.png
+          cp assets/icon_512.png assets/icon.iconset/icon_512x512.png
+          iconutil -c icns assets/icon.iconset -o assets/icon.icns
+
+      - name: Build with PyInstaller
+        run: pyinstaller --clean SecureVault.spec
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Ad-hoc code sign (allows opening without Apple Developer ID)
+        run: codesign --force --deep --sign - dist/SecureVault.app
+
+      - name: Build DMG
+        run: |
+          create-dmg \
+            --volname "SecureVault" \
+            --volicon "assets/icon.icns" \
+            --window-pos 200 120 \
+            --window-size 580 380 \
+            --icon-size 120 \
+            --icon "SecureVault.app" 145 185 \
+            --hide-extension "SecureVault.app" \
+            --app-drop-link 435 185 \
+            "dist/SecureVault-1.0.0.dmg" \
+            "dist/SecureVault.app"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/SecureVault-1.0.0.dmg
+
+  # ── GitHub Release (tag pushes only) ────────────────────────────────
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: release-files/
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+          path: release-files/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "SecureVault ${{ github.ref_name }}"
+          body: |
+            ## SecureVault ${{ github.ref_name }}
+
+            ### Install
+
+            | Platform | Download |
+            |----------|----------|
+            | Windows  | `SecureVault-Setup-1.0.0.exe` |
+            | macOS    | `SecureVault-1.0.0.dmg` |
+
+            **macOS note:** The app is ad-hoc signed. On first launch,
+            right-click → Open to bypass Gatekeeper, then click Open in the dialog.
+
+            Your vault data is stored in:
+            - **Windows:** `%APPDATA%\SecureVault\`
+            - **macOS:** `~/Library/Application Support/SecureVault/`
+          draft: false
+          prerelease: false
+          files: |
+            release-files/SecureVault-Setup-1.0.0.exe
+            release-files/SecureVault-1.0.0.dmg

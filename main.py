@@ -21,6 +21,7 @@ from vault_storage import VaultStorage
 from Vault_details import ItemDetails, ITEM_TYPES
 from Generator import PasswordGenerator
 from password_strength import PasswordStrength
+from updater import UpdateChecker, APP_VERSION
 
 try:
     from now_playing import get_media_info, media_control
@@ -481,6 +482,9 @@ class SecureVault(QMainWindow):
         self._nav_to(0)
         self._np_timer.start(3000)
         self._refresh_np_mini()
+
+        # Check for updates 5 s after startup so the window feels snappy first
+        QTimer.singleShot(5000, self._start_update_check)
 
     # ═══════════════════════════════════════════════════════════════════
     # Sidebar
@@ -1943,6 +1947,34 @@ class SecureVault(QMainWindow):
                 count = self.storage.import_csv(f.read())
             self.lblDataStatus.setText(f"Imported {count} items.")
             self._refresh_list()
+
+    # ═══════════════════════════════════════════════════════════════════
+    # Update checker
+    # ═══════════════════════════════════════════════════════════════════
+
+    def _start_update_check(self):
+        self._update_checker = UpdateChecker(self)
+        self._update_checker.update_available.connect(self._on_update_available)
+        self._update_checker.start()
+
+    def _on_update_available(self, new_version: str):
+        import webbrowser
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Update Available")
+        msg.setIcon(QMessageBox.Information)
+        msg.setText(f"<b>SecureVault {new_version} is available.</b>")
+        msg.setInformativeText(
+            f"You are running version {APP_VERSION}.\n"
+            "Download the latest installer from GitHub?"
+        )
+        msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        msg.button(QMessageBox.Ok).setText("Download Update")
+        msg.button(QMessageBox.Cancel).setText("Not Now")
+        msg.setDefaultButton(QMessageBox.Ok)
+        if msg.exec() == QMessageBox.Ok:
+            webbrowser.open(
+                "https://github.com/edgegithuber7/Secure_vault/releases/latest"
+            )
 
     # ═══════════════════════════════════════════════════════════════════
     # Auto-lock

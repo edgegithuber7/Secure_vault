@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(C:/Users/Sam/AppData/Local/Python/bin/python.exe -c ' *)",
+      "Bash(powershell -NonInteractive -Command ' *)"
+    ]
+  }
+}

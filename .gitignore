@@ -37,3 +37,12 @@ desktop.ini
 vault_export*.json
 vault_export*.csv
 test.py
+
+# ── Build / packaging artifacts ───────────────────────────────────────
+*.spec.bak
+assets/icon_*.png
+assets/icon.ico
+assets/icon.icns
+assets/icon.iconset/
+installer/*.exe
+.claude/

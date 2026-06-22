@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import bcrypt
 
-USERS_FILE = "users.txt"
+from app_paths import USERS_FILE
 
 
 def check_cridentials(self, username: str, password: str) -> bool:

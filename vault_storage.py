@@ -18,7 +18,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-VAULT_DIR = "vaults"
+from app_paths import VAULT_DIR
+
 PBKDF2_ITERATIONS = 480_000
 
 
@@ -29,7 +30,7 @@ class WrongPasswordError(Exception):
 class VaultStorage:
     def __init__(self, username: str, master_password: str):
         self.username = username
-        os.makedirs(VAULT_DIR, exist_ok=True)
+        os.makedirs(VAULT_DIR, exist_ok=True)   # VAULT_DIR lives under app data dir
         self.vault_path = os.path.join(VAULT_DIR, f"{username}.vault")
         self.salt_path = os.path.join(VAULT_DIR, f"{username}.salt")
         self.fernet = self._get_fernet(master_password)
