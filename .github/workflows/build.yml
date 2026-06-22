@@ -1,11 +1,5 @@
 name: Build & Release
 
-# Triggers:
-#   • Push a version tag  (git tag v1.0.0 && git push --tags)
-#     → full release with Windows EXE + macOS DMG attached
-#   • Manual run from the Actions tab (any branch)
-#     → builds artifacts but does NOT create a public release
-
 on:
   push:
     tags:
@@ -16,9 +10,38 @@ permissions:
   contents: write
 
 jobs:
+  # ── Create the GitHub Release immediately on tag push ────────────────
+  # This runs first so a release always appears, even if builds fail.
+  release:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: "SecureVault ${{ github.ref_name }}"
+          body: |
+            ## SecureVault ${{ github.ref_name }}
+
+            ### Download
+
+            | Platform | File |
+            |----------|------|
+            | Windows  | `SecureVault-Setup-*.exe` (attached below once built) |
+            | macOS    | `SecureVault-*.dmg` (attached below once built) |
+
+            **macOS:** Right-click → Open on first launch to bypass Gatekeeper.
+
+            Your vault data is stored locally and is never uploaded anywhere.
+          draft: false
+          prerelease: false
+
   # ── Windows installer ────────────────────────────────────────────────
   build-windows:
+    needs: release
     runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/')
 
     steps:
       - uses: actions/checkout@v4
@@ -40,21 +63,22 @@ jobs:
 
       - name: Install Inno Setup
         run: choco install innosetup --yes --no-progress
-        shell: pwsh
 
       - name: Build installer
-        run: iscc installer\securevault.iss
-        shell: cmd
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\securevault.iss'
+        shell: pwsh
 
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+      - name: Attach installer to release
+        uses: softprops/action-gh-release@v2
         with:
-          name: windows-installer
-          path: dist/SecureVault-Setup-1.0.0.exe
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: dist/SecureVault-Setup-*.exe
 
   # ── macOS DMG ────────────────────────────────────────────────────────
   build-macos:
+    needs: release
     runs-on: macos-latest
+    if: startsWith(github.ref, 'refs/tags/')
 
     steps:
       - uses: actions/checkout@v4
@@ -88,11 +112,11 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller --clean SecureVault.spec
 
+      - name: Ad-hoc code sign
+        run: codesign --force --deep --sign - dist/SecureVault.app
+
       - name: Install create-dmg
         run: brew install create-dmg
-
-      - name: Ad-hoc code sign (allows opening without Apple Developer ID)
-        run: codesign --force --deep --sign - dist/SecureVault.app
 
       - name: Build DMG
         run: |
@@ -105,57 +129,11 @@ jobs:
             --icon "SecureVault.app" 145 185 \
             --hide-extension "SecureVault.app" \
             --app-drop-link 435 185 \
-            "dist/SecureVault-1.0.0.dmg" \
+            "dist/SecureVault-${{ github.ref_name }}.dmg" \
             "dist/SecureVault.app"
 
-      - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-dmg
-          path: dist/SecureVault-1.0.0.dmg
-
-  # ── GitHub Release (tag pushes only) ────────────────────────────────
-  release:
-    needs: [build-windows, build-macos]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-
-    steps:
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-installer
-          path: release-files/
-
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-dmg
-          path: release-files/
-
-      - name: Create GitHub Release
+      - name: Attach DMG to release
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          name: "SecureVault ${{ github.ref_name }}"
-          body: |
-            ## SecureVault ${{ github.ref_name }}
-
-            ### Install
-
-            | Platform | Download |
-            |----------|----------|
-            | Windows  | `SecureVault-Setup-1.0.0.exe` |
-            | macOS    | `SecureVault-1.0.0.dmg` |
-
-            **macOS note:** The app is ad-hoc signed. On first launch,
-            right-click → Open to bypass Gatekeeper, then click Open in the dialog.
-
-            Your vault data is stored in:
-            - **Windows:** `%APPDATA%\SecureVault\`
-            - **macOS:** `~/Library/Application Support/SecureVault/`
-          draft: false
-          prerelease: false
-          files: |
-            release-files/SecureVault-Setup-1.0.0.exe
-            release-files/SecureVault-1.0.0.dmg
+          files: dist/SecureVault-*.dmg
